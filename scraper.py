@@ -13,7 +13,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from time import sleep
 import json
 import math
-from os import getenv
+import os
 
 formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
 
@@ -79,7 +79,7 @@ def search_lyrics(driver, query):
     
     if more_link is not None:
         more_link.click()
-        sleep(0.5)
+        sleep(1)
         return lyrics_div.text
 
     return None
@@ -89,23 +89,38 @@ if __name__ == "__main__":
     CURRENT_DATE = datetime.utcnow().strftime("%Y-%m-%d")
     start_time = datetime.now()
 
-    logger.info("Starting selenium remote session at %s", SELENIUM_HUB_URL)
-    lyrics_csv = "conductor-20k-redflag-violence.txt"
+    logger.info("Starting selenium session")
+    lyrics_csv = os.getenv("SONG_TSV", "conductor-20k-redflag-violence.txt")
+    output_dir = os.getenv("OUTPUT_DIR", "./lyrics")
+
+    if not os.path.exists(output_dir):
+        logger.info('%s folder does not exist, creating it...' % output_dir)
+        os.makedirs(output_dir)
+
+    existing_lyrics = [l.replace('.txt', '') for l in os.listdir(output_dir)]
+    logger.info('Found %i existing lyrics' % len(existing_lyrics))
 
     driver = webdriver.Chrome()
     driver.set_page_load_timeout(10)
 
     with open(lyrics_csv, 'r') as f:
-        for line in f:
+        lines = f.readlines()
+        logger.info("Read %i lines from song file" % (len(lines)))
+        for line in lines:
             parts = line.replace('\n', '').split('\t')
             song_id = parts[0]
+
+            if (song_id in existing_lyrics):
+                logger.warn("%s lyrics already found. Skipping." % song_id)
+                continue
+
             song_title = parts[1]
             song_artist = parts[2]
             
             try:
                 lyrics = search_lyrics(driver, "%s %s lyrics" % (song_title, song_artist))
                 if lyrics is not None:
-                    with open('lyrics/%s.txt' % song_id, 'w') as fw:
+                    with open('%s/%s.txt' % (output_dir, song_id), 'w') as fw:
                         fw.write(lyrics)
                 else:
                     logger.warn("Couldn't find lyrics for %s by %s" % (song_title, song_artist))
