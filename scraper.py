@@ -92,6 +92,7 @@ if __name__ == "__main__":
     logger.info("Starting selenium session")
     lyrics_csv = os.getenv("SONG_TSV", "conductor-20k-redflag-violence.txt")
     output_dir = os.getenv("OUTPUT_DIR", "./lyrics")
+    unscrapped_tsv = os.getenv("UNSCRAPPED_TSV", "unscrapped.txt")
 
     if not os.path.exists(output_dir):
         logger.info('%s folder does not exist, creating it...' % output_dir)
@@ -103,15 +104,21 @@ if __name__ == "__main__":
     driver = webdriver.Chrome()
     driver.set_page_load_timeout(10)
 
+    with open(unscrapped_tsv, 'r') as f:
+        unscrapped_ids = [l.replace('\n', '').split('\t')[0] for l in f.readlines()]
+
+    print('Found %i unscrapped ids' % len(unscrapped_ids))
+    unscrapped_file = open(unscrapped_tsv, 'a+')
+
     with open(lyrics_csv, 'r') as f:
         lines = f.readlines()
         logger.info("Read %i lines from song file" % (len(lines)))
-        for line in lines:
+        for line in lines[200:]:
             parts = line.replace('\n', '').split('\t')
             song_id = parts[0]
 
-            if (song_id in existing_lyrics):
-                logger.warn("%s lyrics already found. Skipping." % song_id)
+            if (song_id in existing_lyrics or song_id in unscrapped_ids):
+                logger.warn("%s lyrics already processed. Skipping." % song_id)
                 continue
 
             song_title = parts[1]
@@ -124,8 +131,14 @@ if __name__ == "__main__":
                         fw.write(lyrics)
                 else:
                     logger.warn("Couldn't find lyrics for %s by %s" % (song_title, song_artist))
+                    unscrapped_file.write(line)
             except Exception as e:
                 logger.warn("Couldn't find lyrics for %s by %s" % (song_title, song_artist))
+                unscrapped_file.write(line)
+
+        unscrapped_file.flush()
+    
+    unscrapped_file.close()
 
     # Close the selenium driver session
     logger.info("Closing the selenium session")
